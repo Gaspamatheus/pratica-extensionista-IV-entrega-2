@@ -1,0 +1,25 @@
+# Configuração dos testes: banco H2 em memória, sem dados de exemplo.
+spring:
+  datasource:
+    url: jdbc:h2:mem:gado_teste;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+
+app:
+  jwt:
+    secret: segredo-de-teste-com-mais-de-32-caracteres
+    expiracao-horas: 1
+  cors:
+    allowed-origins: http://localhost:5173
+  seed:
+    gerente:
+      username: gerente
+      senha: gerente123
+    funcionario:
+      username: funcionario
+      senha: func123
+    dados-exemplo: false

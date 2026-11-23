@@ -1,0 +1,9 @@
+target/
+.idea/
+*.iml
+.mvn/
+mvnw
+mvnw.cmd
+*.log
+requests.http
+README.md

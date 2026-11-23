@@ -1,0 +1,53 @@
+# Configuração padrão: MySQL local (porta 3306).
+# Os valores podem ser trocados por variáveis de ambiente, como no Docker Compose.
+server:
+  port: ${PORT:8080}
+
+spring:
+  application:
+    name: gado-corte-api
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/gado_corte?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Sao_Paulo}
+    # Usuário criado pelo script database/gado_corte.sql
+    username: ${DB_USER:gado_app}
+    password: ${DB_PASSWORD:gado123}
+  jpa:
+    hibernate:
+      # "update" cria ou ajusta as tabelas se faltar algo. Com o banco criado pelo script, nada muda.
+      ddl-auto: ${DDL_AUTO:update}
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: America/Sao_Paulo
+  jackson:
+    time-zone: America/Sao_Paulo
+
+app:
+  jwt:
+    # Troque em produção (variável JWT_SECRET). Mínimo de 32 caracteres.
+    secret: ${JWT_SECRET:troque-este-segredo-em-producao-0123456789}
+    expiracao-horas: ${JWT_EXPIRACAO_HORAS:12}
+  cors:
+    # Origens do front liberadas (separadas por vírgula). 5173 = Vite dev, 4173 = Vite preview.
+    # Aceita curinga, ex.: http://192.168.*:5173 para testar no celular sem o proxy do Vite.
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:4173}
+  seed:
+    gerente:
+      username: ${SEED_GERENTE_USER:gerente}
+      senha: ${SEED_GERENTE_SENHA:gerente123}
+    funcionario:
+      username: ${SEED_FUNCIONARIO_USER:funcionario}
+      senha: ${SEED_FUNCIONARIO_SENHA:func123}
+    dados-exemplo: ${SEED_DADOS_EXEMPLO:true}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

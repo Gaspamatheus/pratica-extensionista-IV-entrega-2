@@ -1,0 +1,70 @@
+### Testes rápidos da API pelo IntelliJ (abra este arquivo e clique na seta verde de cada requisição).
+### Rode a API antes. O token do login fica guardado e é usado nas requisições seguintes.
+
+### 1. Login como gerente
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{"username": "gerente", "senha": "gerente123"}
+
+> {% client.global.set("token", response.body.token); %}
+
+### 2. Usuário logado
+GET http://localhost:8080/api/auth/me
+Authorization: Bearer {{token}}
+
+### 3. Resumo do rebanho (tela inicial)
+GET http://localhost:8080/api/dashboard/resumo
+Authorization: Bearer {{token}}
+
+### 4. Listar animais ativos
+GET http://localhost:8080/api/animais?status=ATIVO
+Authorization: Bearer {{token}}
+
+### 5. Cadastrar animal
+POST http://localhost:8080/api/animais
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "brinco": "BR-050",
+  "nome": "Valente",
+  "raca": "Nelore",
+  "sexo": "MACHO",
+  "dataNascimento": "2025-01-10",
+  "dataEntrada": "2026-09-01",
+  "pesoEntrada": 310,
+  "lote": "Pasto 3"
+}
+
+> {% client.global.set("animalId", response.body.id); %}
+
+### 6. Lançar pesagem (o idCliente evita duplicar quando a fila offline reenviar)
+POST http://localhost:8080/api/pesagens
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"animalId": {{animalId}}, "data": "2026-11-20", "pesoKg": 362.5, "idCliente": "{{$uuid}}"}
+
+### 7. Lançar vacina com 30 dias de carência
+POST http://localhost:8080/api/sanidade/aplicacoes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"animalId": {{animalId}}, "tipo": "VERMIFUGO", "produto": "Ivermectina 1%", "dose": "1 ml/50 kg",
+ "dataAplicacao": "2026-11-20", "carenciaDias": 30}
+
+### 8. Tentar vender (deve dar 422: animal em carência)
+POST http://localhost:8080/api/animais/{{animalId}}/venda
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"data": "2026-11-22", "pesoKg": 362.5, "valorTotal": 7900, "comprador": "Frigorífico Exemplo"}
+
+### 9. Animais em carência hoje
+GET http://localhost:8080/api/sanidade/carencias
+Authorization: Bearer {{token}}
+
+### 10. Detalhe do animal com peso atual e GMD
+GET http://localhost:8080/api/animais/{{animalId}}
+Authorization: Bearer {{token}}

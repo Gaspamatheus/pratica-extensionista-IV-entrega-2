@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infraestrutura: Gestão de Gado de Corte</title>
+<style>
+  :root {
+    --fundo: #fbfaf7; --texto: #23261f; --suave: #5d6357; --linha: #dcd8cc;
+    --verde: #234f2b; --verde-claro: #e6efe3; --azul-claro: #ecebfb; --azul: #3b347f;
+    --terra-claro: #f8e9e3; --terra: #7a2e12; --codigo: #f1efe8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fundo); color: var(--texto);
+         font: 16px/1.6 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 64px; }
+  header { border-bottom: 3px solid var(--verde); margin-bottom: 24px; padding-bottom: 12px; }
+  h1 { color: var(--verde); margin: 0 0 4px; font-size: 1.9rem; line-height: 1.25; }
+  h2 { color: var(--verde); margin-top: 40px; border-bottom: 1px solid var(--linha); padding-bottom: 4px; }
+  h3 { margin-top: 24px; }
+  .sub { color: var(--suave); margin: 0; }
+  nav { background: #fff; border: 1px solid var(--linha); border-radius: 8px; padding: 12px 20px; }
+  nav ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; }
+  @media (max-width: 600px) { nav ol { columns: 1; } }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: .95rem; background: #fff; }
+  th, td { border: 1px solid var(--linha); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--verde-claro); }
+  td code { overflow-wrap: anywhere; }
+  .tabela { overflow-x: auto; }
+  code { background: var(--codigo); padding: 1px 5px; border-radius: 4px; font-size: .9em;
+         font-family: Consolas, "Cascadia Mono", monospace; }
+  pre { background: #22261f; color: #eef0e8; padding: 12px 16px; border-radius: 8px; overflow-x: auto;
+        font-size: .88rem; line-height: 1.5; }
+  pre code { background: none; padding: 0; color: inherit; }
+  .nota { background: var(--verde-claro); border-left: 4px solid var(--verde); padding: 10px 14px; border-radius: 4px; }
+  .alerta { background: var(--terra-claro); border-left: 4px solid var(--terra); padding: 10px 14px; border-radius: 4px; }
+  figure { margin: 16px 0; background: #fff; border: 1px solid var(--linha); border-radius: 8px; padding: 12px; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption { color: var(--suave); font-size: .9rem; text-align: center; margin-top: 6px; }
+  footer { margin-top: 48px; color: var(--suave); font-size: .9rem; border-top: 1px solid var(--linha); padding-top: 12px; }
+  /* Impressão e PDF (A4): blocos de código claros, sem cortar figuras, linhas de tabela e títulos */
+  @page { size: A4; margin: 18mm 16mm 20mm; }
+  @media print {
+    body { background: #fff; font-size: 10.5pt; }
+    footer { break-inside: avoid; margin-top: 24px; }
+    main { max-width: none; padding: 0; }
+    pre { white-space: pre-wrap; background: var(--codigo); color: var(--texto); border: 1px solid var(--linha); }
+    h2, h3 { break-after: avoid; }
+    figure, pre, tr, .nota, .alerta { break-inside: avoid; }
+    thead { display: table-header-group; }
+    table { font-size: 9.5pt; }
+    h2 { margin-top: 28px; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <h1>Configuração da infraestrutura</h1>
+  <p class="sub">App de Gestão de Gado de Corte · Prática Extensionista IV · Entrega 2</p>
+  <p class="sub">Autor: Matheus Augusto</p>
+</header>
+
+<nav>
+  <strong>Sumário</strong>
+  <ol>
+    <li><a href="#visao">Visão geral</a></li>
+    <li><a href="#componentes">Componentes (contêineres)</a></li>
+    <li><a href="#rede">Rede, portas e fluxo de uma requisição</a></li>
+    <li><a href="#config">Configuração e variáveis de ambiente</a></li>
+    <li><a href="#subir">Como subir o ambiente</a></li>
+    <li><a href="#dados">Banco de dados, persistência e backup</a></li>
+    <li><a href="#pwa">PWA, HTTPS e acesso pelo celular</a></li>
+    <li><a href="#seguranca">Segurança</a></li>
+    <li><a href="#cicd">Integração e entrega contínuas (CI/CD)</a></li>
+    <li><a href="#branches">Fluxo de branches</a></li>
+    <li><a href="#ambientes">Ambientes de execução</a></li>
+    <li><a href="#problemas">Solução de problemas</a></li>
+  </ol>
+</nav>
+
+<!-- ================================================================ -->
+<h2 id="visao">1. Visão geral</h2>
+<p>
+  A solução tem três partes, definidas na arquitetura da entrega 1: o <strong>app</strong> (PWA em React + Vite),
+  a <strong>API</strong> REST (Spring Boot 3.5, Java 17) e o <strong>banco</strong> MySQL 8.4. Cada parte roda
+  em um contêiner Docker, e o arquivo <code>docker-compose.yml</code> na raiz do repositório descreve e liga os três.
+  Com o Docker instalado, um único comando sobe o sistema inteiro, igual em qualquer computador ou servidor.
+</p>
+<p>
+  O código é versionado no GitHub. A cada push, o GitHub Actions testa a API e o app, confere se os contêineres
+  sobem e envia a análise de qualidade ao SonarCloud (CI). Quando a branch <code>main</code> recebe um merge
+  aprovado, as imagens Docker são geradas e publicadas no GitHub Container Registry (CD).
+</p>
+
+<figure>
+<svg viewBox="0 0 860 380" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, system-ui, sans-serif" role="img" aria-labelledby="t1">
+  <title id="t1">Contêineres da solução e o caminho de uma requisição</title>
+  <defs>
+    <marker id="seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5d6357"/>
+    </marker>
+  </defs>
+  <!-- usuários -->
+  <rect x="10" y="40" width="150" height="70" rx="8" fill="#f1efe8" stroke="#8a8a80"/>
+  <text x="85" y="70" text-anchor="middle" font-size="15" font-weight="600" fill="#23261f">Navegador / PWA</text>
+  <text x="85" y="92" text-anchor="middle" font-size="12" fill="#5d6357">computador ou celular</text>
+  <rect x="10" y="250" width="150" height="70" rx="8" fill="#f1efe8" stroke="#8a8a80"/>
+  <text x="85" y="280" text-anchor="middle" font-size="15" font-weight="600" fill="#23261f">Celular (4G/Wi-Fi)</text>
+  <text x="85" y="302" text-anchor="middle" font-size="12" fill="#5d6357">endereço https</text>
+  <!-- docker host -->
+  <rect x="200" y="10" width="650" height="360" rx="12" fill="#fafaf7" stroke="#b9b5a8" stroke-dasharray="6 4"/>
+  <text x="216" y="34" font-size="13" fill="#5d6357">Docker Compose · rede interna "interna"</text>
+  <!-- web -->
+  <rect x="240" y="50" width="170" height="90" rx="8" fill="#f8e9e3" stroke="#7a2e12"/>
+  <text x="325" y="80" text-anchor="middle" font-size="15" font-weight="600" fill="#7a2e12">web · Nginx</text>
+  <text x="325" y="102" text-anchor="middle" font-size="12" fill="#7a2e12">build do React (PWA)</text>
+  <text x="325" y="122" text-anchor="middle" font-size="12" fill="#7a2e12">porta 80</text>
+  <!-- api -->
+  <rect x="460" y="50" width="170" height="90" rx="8" fill="#f8e9e3" stroke="#7a2e12"/>
+  <text x="545" y="80" text-anchor="middle" font-size="15" font-weight="600" fill="#7a2e12">api · Spring Boot</text>
+  <text x="545" y="102" text-anchor="middle" font-size="12" fill="#7a2e12">JWT, Swagger, Actuator</text>
+  <text x="545" y="122" text-anchor="middle" font-size="12" fill="#7a2e12">porta 8080</text>
+  <!-- db -->
+  <rect x="680" y="50" width="150" height="90" rx="8" fill="#f8e9e3" stroke="#7a2e12"/>
+  <text x="755" y="80" text-anchor="middle" font-size="15" font-weight="600" fill="#7a2e12">db · MySQL 8.4</text>
+  <text x="755" y="102" text-anchor="middle" font-size="12" fill="#7a2e12">banco gado_corte</text>
+  <text x="755" y="122" text-anchor="middle" font-size="12" fill="#7a2e12">porta 3306</text>
+  <!-- volume -->
+  <rect x="680" y="190" width="150" height="56" rx="28" fill="#fff" stroke="#7a2e12"/>
+  <text x="755" y="214" text-anchor="middle" font-size="13" font-weight="600" fill="#7a2e12">volume</text>
+  <text x="755" y="232" text-anchor="middle" font-size="12" fill="#7a2e12">dados-mysql</text>
+  <!-- tunel -->
+  <rect x="240" y="250" width="170" height="70" rx="8" fill="#ecebfb" stroke="#3b347f" stroke-dasharray="5 3"/>
+  <text x="325" y="278" text-anchor="middle" font-size="15" font-weight="600" fill="#3b347f">tunel (opcional)</text>
+  <text x="325" y="300" text-anchor="middle" font-size="12" fill="#3b347f">cloudflared · HTTPS</text>
+  <!-- setas -->
+  <line x1="160" y1="75" x2="236" y2="85" stroke="#5d6357" stroke-width="2" marker-end="url(#seta)"/>
+  <text x="168" y="62" font-size="11" fill="#5d6357">http :80</text>
+  <line x1="410" y1="95" x2="456" y2="95" stroke="#5d6357" stroke-width="2" marker-end="url(#seta)"/>
+  <text x="433" y="86" text-anchor="middle" font-size="11" fill="#5d6357">/api</text>
+  <line x1="630" y1="95" x2="676" y2="95" stroke="#5d6357" stroke-width="2" marker-end="url(#seta)"/>
+  <text x="653" y="86" text-anchor="middle" font-size="11" fill="#5d6357">JDBC</text>
+  <line x1="755" y1="140" x2="755" y2="186" stroke="#5d6357" stroke-width="2" marker-end="url(#seta)"/>
+  <line x1="160" y1="285" x2="236" y2="285" stroke="#3b347f" stroke-width="2" marker-end="url(#seta)"/>
+  <line x1="325" y1="250" x2="325" y2="144" stroke="#3b347f" stroke-width="2" marker-end="url(#seta)"/>
+  <text x="333" y="200" font-size="11" fill="#3b347f">http://web:80</text>
+  <text x="440" y="300" font-size="12" fill="#5d6357">Só o "web" precisa ser acessado pelo usuário.</text>
+  <text x="440" y="318" font-size="12" fill="#5d6357">A API (8080) e o MySQL (3306, só local)</text>
+  <text x="440" y="336" font-size="12" fill="#5d6357">ficam expostos para testes e Workbench.</text>
+</svg>
+<figcaption>Figura 1. Contêineres do <code>docker-compose.yml</code> e o caminho de uma requisição.</figcaption>
+</figure>
+
+<!-- ================================================================ -->
+<h2 id="componentes">2. Componentes (contêineres)</h2>
+<div class="tabela">
+<table>
+  <thead><tr><th>Serviço</th><th>Imagem</th><th>Porta no computador</th><th>Função</th></tr></thead>
+  <tr><td><code>db</code></td><td><code>mysql:8.4</code> (oficial)</td><td>3306, só em 127.0.0.1</td>
+      <td>Banco <code>gado_corte</code>. Na primeira subida executa <code>api/database/gado_corte.sql</code>, que cria as
+      5 tabelas, os usuários de login e um rebanho de exemplo.</td></tr>
+  <tr><td><code>api</code></td><td><code>gado-corte-api</code>, gerada por <code>api/Dockerfile</code></td><td>8080</td>
+      <td>API REST: rebanho, pesagens, sanidade, vendas e login JWT. Health check em <code>/actuator/health</code>,
+      Swagger em <code>/swagger-ui.html</code>.</td></tr>
+  <tr><td><code>web</code></td><td><code>gado-corte-web</code>, gerada por <code>app/Dockerfile</code></td><td>80</td>
+      <td>Nginx servindo o build de produção do React (PWA, com service worker) e repassando <code>/api</code> para a API.</td></tr>
+  <tr><td><code>tunel</code></td><td><code>cloudflare/cloudflared</code></td><td>nenhuma</td>
+      <td>Opcional (perfil <code>tunel</code>). Cria um endereço HTTPS público temporário para instalar o PWA no celular.</td></tr>
+</table>
+</div>
+
+<h3>2.1 Imagem da API (<code>api/Dockerfile</code>)</h3>
+<p>Build em dois estágios (<em>multi-stage</em>):</p>
+<ol>
+  <li><strong>Build:</strong> imagem <code>maven:3.9.11-eclipse-temurin-17</code>. Copia primeiro só o <code>pom.xml</code> e baixa as
+      dependências; assim, quando apenas o código muda, o Docker reaproveita essa camada e o build fica rápido. Depois
+      compila e gera o <code>.jar</code> (os testes rodam na CI, não aqui).</li>
+  <li><strong>Execução:</strong> imagem <code>eclipse-temurin:17-jre</code>, só com o Java de execução e o <code>.jar</code>:
+      sem Maven e sem código-fonte, a imagem fica menor e com menos pontos de ataque. O processo roda com o usuário
+      <code>gado</code>, não como root. O <code>HEALTHCHECK</code> consulta <code>/actuator/health</code>, que só responde
+      <code>UP</code> quando a API conecta ao banco. A JVM usa até 75% da memória do contêiner.</li>
+</ol>
+
+<h3>2.2 Imagem do app (<code>app/Dockerfile</code> e <code>app/nginx.conf</code>)</h3>
+<ol>
+  <li><strong>Build:</strong> <code>node:22-alpine</code> roda <code>npm ci</code> e <code>npm run build</code>, gerando a pasta
+      <code>dist/</code> com o app, o manifest e o service worker do PWA.</li>
+  <li><strong>Execução:</strong> <code>nginx:1.28-alpine</code> serve o <code>dist/</code>. A configuração:
+    <ul>
+      <li>repassa <code>/api/</code> e o Swagger para o contêiner <code>api</code> (proxy reverso), então app e API ficam na
+          <strong>mesma origem</strong> e o navegador não precisa de CORS;</li>
+      <li>envia à API o endereço e o protocolo originais (<code>Host</code>, <code>X-Forwarded-Host</code>,
+          <code>X-Forwarded-Proto</code>), para a API reconhecer que a chamada vem do próprio app, inclusive atrás do túnel HTTPS;</li>
+      <li>manda as rotas do React Router (<code>/animais</code>, <code>/vacinas/nova</code>...) para o <code>index.html</code>;</li>
+      <li>marca <code>sw.js</code>, <code>index.html</code> e o manifest como <code>no-cache</code>, para o app perceber
+          quando há versão nova, e guarda por 1 ano os arquivos de <code>/assets</code>, que têm hash no nome;</li>
+      <li>comprime com gzip os arquivos de texto.</li>
+    </ul>
+  </li>
+</ol>
+
+<h3>2.3 Ordem de inicialização</h3>
+<p>
+  O Compose usa <em>health checks</em> para subir na ordem certa: a <code>api</code> só inicia quando o MySQL responde
+  ao <code>mysqladmin ping</code>, e o <code>web</code> só inicia quando a API está <code>UP</code>. Todos têm
+  <code>restart: unless-stopped</code>: voltam sozinhos se caírem ou se o computador reiniciar com o Docker aberto.
+</p>
+
+<!-- ================================================================ -->
+<h2 id="rede">3. Rede, portas e fluxo de uma requisição</h2>
+<p>
+  Os contêineres ficam numa rede Docker própria (<code>interna</code>) e se encontram pelo nome do serviço:
+  a API conecta em <code>jdbc:mysql://db:3306/gado_corte</code> e o Nginx em <code>http://api:8080</code>.
+</p>
+<div class="tabela">
+<table>
+  <thead><tr><th>Endereço</th><th>O que abre</th></tr></thead>
+  <tr><td><a href="http://localhost">http://localhost</a></td><td>App (login <code>gerente</code> / <code>gerente123</code> ou <code>funcionario</code> / <code>func123</code>)</td></tr>
+  <tr><td><a href="http://localhost/swagger-ui.html">http://localhost/swagger-ui.html</a></td><td>Documentação interativa da API (também em <code>:8080</code>)</td></tr>
+  <tr><td><a href="http://localhost:8080/actuator/health">http://localhost:8080/actuator/health</a></td><td>Saúde da API (<code>{"status":"UP"}</code>)</td></tr>
+  <tr><td><code>localhost:3306</code></td><td>MySQL, para o Workbench (usuário <code>gado_app</code>). Só aceita conexões do próprio computador.</td></tr>
+</table>
+</div>
+<p><strong>Exemplo: um funcionário registra uma pesagem no app.</strong></p>
+<ol>
+  <li>O navegador envia <code>POST /api/pesagens</code> com o token JWT para <code>http://localhost</code> (contêiner <code>web</code>).</li>
+  <li>O Nginx vê que o caminho começa com <code>/api/</code> e repassa para <code>http://api:8080/api/pesagens</code>.</li>
+  <li>A API valida o token (filtro JWT), aplica as regras (animal ativo, data válida, <code>idCliente</code> não repetido)
+      e grava no MySQL pelo JPA/Hibernate.</li>
+  <li>A resposta volta pelo mesmo caminho. Se não houver internet, o app guarda a pesagem no IndexedDB e repete os
+      passos quando a conexão voltar.</li>
+</ol>
+
+<!-- ================================================================ -->
+<h2 id="config">4. Configuração e variáveis de ambiente</h2>
+<p>
+  Nenhuma senha fica fixa no código. O Compose lê o arquivo <code>.env</code> da raiz (criado a partir de
+  <code>.env.example</code>), que fica fora do Git. Sem <code>.env</code>, valem os padrões de desenvolvimento abaixo.
+</p>
+<div class="tabela">
+<table>
+  <thead><tr><th>Variável</th><th>Padrão</th><th>Uso</th></tr></thead>
+  <tr><td><code>MYSQL_ROOT_PASSWORD</code></td><td><code>root123</code></td><td>Senha do root do MySQL</td></tr>
+  <tr><td><code>DB_USER</code> / <code>DB_PASSWORD</code></td><td><code>gado_app</code> / <code>gado123</code></td><td>Usuário da API no banco, com acesso só a <code>gado_corte</code></td></tr>
+  <tr><td><code>JWT_SECRET</code></td><td>valor de desenvolvimento</td><td>Chave que assina os tokens (mínimo 32 caracteres). <strong>Trocar em produção.</strong></td></tr>
+  <tr><td><code>JWT_EXPIRACAO_HORAS</code></td><td><code>12</code></td><td>Validade do login (e do uso offline do app)</td></tr>
+  <tr><td><code>SEED_DADOS_EXEMPLO</code></td><td><code>true</code></td><td>Cria o rebanho de exemplo se o banco estiver vazio</td></tr>
+  <tr><td><code>CORS_ORIGINS</code></td><td><code>http://localhost:5173,http://localhost:4173</code></td><td>Origens extras liberadas (Vite rodando fora do Docker)</td></tr>
+  <tr><td><code>WEB_PORTA</code> / <code>API_PORTA</code> / <code>MYSQL_PORTA</code></td><td><code>80</code> / <code>8080</code> / <code>3306</code></td><td>Portas no computador, caso alguma já esteja em uso</td></tr>
+  <tr><td><code>REGISTRO</code> / <code>TAG</code></td><td><code>ghcr.io/gaspamatheus</code> / <code>latest</code></td><td>De onde baixar as imagens prontas (<code>docker compose pull</code>)</td></tr>
+</table>
+</div>
+<p>
+  No Compose a API recebe ainda <code>DDL_AUTO=validate</code>: as tabelas são criadas pelo script SQL e o Hibernate
+  apenas confere se batem com as entidades Java, sem alterar o banco. Fora do Docker o padrão continua <code>update</code>.
+</p>
+
+<!-- ================================================================ -->
+<h2 id="subir">5. Como subir o ambiente</h2>
+<h3>5.1 Pré-requisito</h3>
+<p>
+  Docker Desktop (Windows ou macOS) ou Docker Engine com o plugin Compose (Linux). No Windows, o Docker Desktop usa o WSL 2;
+  o instalador oferece ativá-lo. Não é preciso instalar Java, Node nem MySQL: tudo roda dentro dos contêineres.
+</p>
+<h3>5.2 Passo a passo</h3>
+<pre><code># 1. Na pasta do projeto
+cd pratica-extensionista-IV-entrega-2
+
+# 2. Criar o .env (opcional; sem ele valem os padrões)
+copy .env.example .env          # Windows
+cp .env.example .env            # Linux/macOS
+
+# 3. Construir as imagens e subir tudo em segundo plano
+docker compose up -d --build
+
+# 4. Acompanhar até os três ficarem "healthy" (leva cerca de 1 minuto na primeira vez)
+docker compose ps</code></pre>
+<p>Depois é só abrir <a href="http://localhost">http://localhost</a>.</p>
+
+<h3>5.3 Comandos do dia a dia</h3>
+<div class="tabela">
+<table>
+  <thead><tr><th>Comando</th><th>O que faz</th></tr></thead>
+  <tr><td><code>docker compose logs -f api</code></td><td>Mostra o log da API em tempo real</td></tr>
+  <tr><td><code>docker compose stop</code> / <code>start</code></td><td>Para e retoma os contêineres</td></tr>
+  <tr><td><code>docker compose up -d --build</code></td><td>Reconstrói e sobe de novo depois de mudar o código</td></tr>
+  <tr><td><code>docker compose down</code></td><td>Remove os contêineres; os dados continuam no volume</td></tr>
+  <tr><td><code>docker compose down -v</code></td><td>Remove tudo, <strong>inclusive o banco</strong> (volta ao rebanho de exemplo)</td></tr>
+  <tr><td><code>docker compose pull &amp;&amp; docker compose up -d</code></td><td>Usa as imagens publicadas pela CD no GHCR, sem compilar nada</td></tr>
+</table>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="dados">6. Banco de dados, persistência e backup</h2>
+<ul>
+  <li>Os arquivos do MySQL ficam no volume Docker <code>dados-mysql</code>, que sobrevive a <code>down</code>,
+      atualizações de imagem e reinícios.</li>
+  <li>O script <code>api/database/gado_corte.sql</code> é montado em <code>/docker-entrypoint-initdb.d</code>. O MySQL o
+      executa <strong>só na primeira subida</strong>, com o volume vazio. Ele pode ser rodado de novo sem duplicar
+      nada e também serve para criar o banco num MySQL instalado direto no Windows (MySQL Workbench).</li>
+  <li>O banco usa <code>utf8mb4</code>, então acentos e emojis são gravados corretamente.</li>
+</ul>
+<pre><code># Backup
+docker compose exec db sh -c "mysqldump -uroot -p\"$MYSQL_ROOT_PASSWORD\" gado_corte" &gt; backup.sql
+
+# Restaurar
+docker compose exec -T db sh -c "mysql -uroot -p\"$MYSQL_ROOT_PASSWORD\" gado_corte" &lt; backup.sql</code></pre>
+
+<!-- ================================================================ -->
+<h2 id="pwa">7. PWA, HTTPS e acesso pelo celular</h2>
+<p>
+  Os navegadores só instalam um PWA e ativam o service worker (uso offline) em <strong>HTTPS</strong> ou em
+  <code>localhost</code>. No computador, <code>http://localhost</code> já funciona. Para o celular há duas opções:
+</p>
+<h3>7.1 Túnel HTTPS (recomendado para teste e apresentação)</h3>
+<pre><code>docker compose --profile tunel up -d
+docker compose logs tunel | findstr trycloudflare     # Windows
+docker compose logs tunel | grep trycloudflare        # Linux/macOS</code></pre>
+<p>
+  O log mostra um endereço como <code>https://palavras-aleatorias.trycloudflare.com</code>. Aberto no celular, ele chega
+  ao Nginx pelo túnel da Cloudflare, já com certificado válido, e funciona em qualquer rede, inclusive 4G. No Android,
+  toque em <em>Instalar</em>; no iPhone, <em>Compartilhar &gt; Adicionar à Tela de Início</em>. O endereço muda a cada
+  vez que o túnel sobe e não exige conta.
+</p>
+<h3>7.2 Publicação definitiva</h3>
+<p>
+  Em um servidor (VPS) com domínio próprio, os mesmos contêineres sobem com <code>docker compose pull &amp;&amp; docker compose up -d</code>,
+  usando as imagens do GHCR. O HTTPS fica com um proxy na frente do <code>web</code> (Caddy, Traefik ou Nginx com
+  Let's Encrypt) ou com um túnel nomeado da Cloudflare. Nesse caso, trocar <code>JWT_SECRET</code> e as senhas no
+  <code>.env</code> e não publicar as portas 8080 e 3306.
+</p>
+
+<!-- ================================================================ -->
+<h2 id="seguranca">8. Segurança</h2>
+<ul>
+  <li><strong>Segredos fora do código:</strong> senhas e a chave do JWT vêm do <code>.env</code> (ignorado pelo Git) ou dos
+      <em>secrets</em> do GitHub.</li>
+  <li><strong>Banco:</strong> a API usa o usuário <code>gado_app</code>, com acesso só ao banco <code>gado_corte</code>, e não o root.
+      A porta 3306 é publicada só em <code>127.0.0.1</code>: outro computador da rede não alcança o MySQL.</li>
+  <li><strong>Senhas dos usuários</strong> guardadas como hash BCrypt; login devolve um token JWT assinado com validade limitada.</li>
+  <li><strong>Perfis:</strong> GERENTE faz tudo; FUNCIONARIO consulta e lança pesagens e vacinas. A API confere o perfil em cada rota.</li>
+  <li><strong>Mesma origem:</strong> o Nginx serve o app e a API pelo mesmo endereço, e a API recusa chamadas de navegador
+      vindas de outros sites (CORS só para as origens configuradas).</li>
+  <li><strong>Contêineres:</strong> a API roda com usuário sem privilégio; as imagens finais não têm compilador nem código-fonte.</li>
+  <li><strong>CI:</strong> os workflows têm permissões mínimas (<code>contents: read</code>); só a CD recebe <code>packages: write</code> para publicar imagens.</li>
+</ul>
+
+<!-- ================================================================ -->
+<h2 id="cicd">9. Integração e entrega contínuas (CI/CD)</h2>
+
+<figure>
+<svg viewBox="0 0 860 300" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, system-ui, sans-serif" role="img" aria-labelledby="t2">
+  <title id="t2">Pipeline de CI e CD no GitHub Actions</title>
+  <defs>
+    <marker id="seta2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#5d6357"/>
+    </marker>
+  </defs>
+  <rect x="10" y="20" width="160" height="60" rx="8" fill="#f1efe8" stroke="#8a8a80"/>
+  <text x="90" y="46" text-anchor="middle" font-size="14" font-weight="600" fill="#23261f">push / pull request</text>
+  <text x="90" y="66" text-anchor="middle" font-size="12" fill="#5d6357">feature → develop → main</text>
+  <rect x="210" y="10" width="640" height="150" rx="12" fill="#fafaf7" stroke="#b9b5a8"/>
+  <text x="226" y="32" font-size="13" font-weight="600" fill="#23261f">ci.yml · todo push e PR</text>
+  <rect x="226" y="46" width="140" height="60" rx="8" fill="#ecebfb" stroke="#3b347f"/>
+  <text x="296" y="72" text-anchor="middle" font-size="14" font-weight="600" fill="#3b347f">Backend</text>
+  <text x="296" y="92" text-anchor="middle" font-size="11" fill="#3b347f">mvn verify, JaCoCo</text>
+  <rect x="226" y="112" width="140" height="42" rx="8" fill="#ecebfb" stroke="#3b347f"/>
+  <text x="296" y="129" text-anchor="middle" font-size="13" font-weight="600" fill="#3b347f">Frontend</text>
+  <text x="296" y="146" text-anchor="middle" font-size="11" fill="#3b347f">Vitest, vite build</text>
+  <rect x="386" y="46" width="200" height="106" rx="8" fill="#ecebfb" stroke="#3b347f"/>
+  <text x="486" y="80" text-anchor="middle" font-size="14" font-weight="600" fill="#3b347f">Infra</text>
+  <text x="486" y="102" text-anchor="middle" font-size="11" fill="#3b347f">docker compose build + up</text>
+  <text x="486" y="120" text-anchor="middle" font-size="11" fill="#3b347f">teste de login pelo Nginx</text>
+  <rect x="640" y="46" width="190" height="106" rx="8" fill="#ecebfb" stroke="#3b347f"/>
+  <text x="735" y="80" text-anchor="middle" font-size="14" font-weight="600" fill="#3b347f">SonarCloud</text>
+  <text x="735" y="102" text-anchor="middle" font-size="11" fill="#3b347f">cobertura, bugs,</text>
+  <text x="735" y="120" text-anchor="middle" font-size="11" fill="#3b347f">code smells</text>
+  <line x1="170" y1="50" x2="206" y2="50" stroke="#5d6357" stroke-width="2" marker-end="url(#seta2)"/>
+  <rect x="210" y="200" width="640" height="90" rx="12" fill="#fafaf7" stroke="#b9b5a8"/>
+  <text x="226" y="222" font-size="13" font-weight="600" fill="#23261f">cd.yml · só na main, depois da CI verde</text>
+  <rect x="226" y="232" width="250" height="48" rx="8" fill="#e6efe3" stroke="#234f2b"/>
+  <text x="351" y="261" text-anchor="middle" font-size="13" font-weight="600" fill="#234f2b">docker build (api e web)</text>
+  <rect x="540" y="232" width="290" height="48" rx="8" fill="#e6efe3" stroke="#234f2b"/>
+  <text x="685" y="261" text-anchor="middle" font-size="13" font-weight="600" fill="#234f2b">push ghcr.io · latest e sha-xxxxxxx</text>
+  <line x1="476" y1="256" x2="536" y2="256" stroke="#5d6357" stroke-width="2" marker-end="url(#seta2)"/>
+  <line x1="530" y1="160" x2="530" y2="196" stroke="#5d6357" stroke-width="2" marker-end="url(#seta2)"/>
+  <text x="540" y="184" font-size="11" fill="#5d6357">merge na main</text>
+</svg>
+<figcaption>Figura 2. Workflows do GitHub Actions, seguindo o diagrama de DevOps da entrega 1.</figcaption>
+</figure>
+
+<h3>9.1 CI (<code>.github/workflows/ci.yml</code>)</h3>
+<p>Roda em todo push nas branches <code>main</code>, <code>develop</code> e <code>feature/**</code> e em todo pull request. Os jobs:</p>
+<div class="tabela">
+<table>
+  <thead><tr><th>Job</th><th>O que faz</th><th>Falha quando</th></tr></thead>
+  <tr><td>Backend</td><td>Java 17 (Temurin) com cache do Maven; <code>mvn -B verify</code> roda os testes JUnit 5 + Mockito
+      e de integração (MockMvc + H2) e gera a cobertura do JaCoCo</td><td>algum teste falha ou o código não compila</td></tr>
+  <tr><td>Frontend</td><td>Node 22 com cache do npm; <code>npm ci</code>, <code>npm run test:coverage</code> (Vitest + Testing Library,
+      inclusive a fila offline) e <code>npm run build</code></td><td>teste falha ou o build do PWA quebra</td></tr>
+  <tr><td>Infra</td><td>valida o <code>docker-compose.yml</code>, constrói as duas imagens, sobe MySQL + API + Nginx e faz login
+      e listagem de animais pelo Nginx, como um usuário faria</td><td>um Dockerfile quebra, um contêiner não fica saudável ou a API não responde pelo app</td></tr>
+  <tr><td>SonarCloud</td><td>depois de Backend e Frontend, envia código e cobertura (Java e JavaScript) ao SonarCloud</td>
+      <td>o <em>Quality Gate</em> reprova, se for marcado como obrigatório</td></tr>
+</table>
+</div>
+<p>Um push novo na mesma branch cancela a execução anterior, para não gastar minutos com código que já mudou.</p>
+
+<h3>9.2 CD (<code>.github/workflows/cd.yml</code>)</h3>
+<p>
+  É disparada quando a CI termina com sucesso na <code>main</code> (ou à mão, em <em>Actions &gt; CD &gt; Run workflow</em>).
+  Constrói as imagens <code>gado-corte-api</code> e <code>gado-corte-web</code> do commit aprovado e publica no
+  GitHub Container Registry com duas tags: <code>latest</code> e <code>sha-</code> mais o hash curto do commit, que permite
+  voltar para uma versão anterior (<code>TAG=sha-1a2b3c4</code> no <code>.env</code>). Usa cache de camadas do próprio
+  GitHub Actions para builds mais rápidos e o <code>GITHUB_TOKEN</code> do workflow, sem precisar criar senha.
+</p>
+<p class="nota">
+  Em repositório privado, as imagens também nascem privadas. Para baixá-las em outra máquina, faça
+  <code>docker login ghcr.io</code> com um token de acesso (permissão <code>read:packages</code>) ou torne o pacote público em
+  <em>GitHub &gt; Packages &gt; Package settings</em>.
+</p>
+
+<h3>9.3 Configurar o SonarCloud (uma vez)</h3>
+<ol>
+  <li>Entrar em <a href="https://sonarcloud.io">sonarcloud.io</a> com a conta do GitHub e importar o repositório
+      (<em>Analyze new project</em>), no modo de análise pelo GitHub Actions (desligar a <em>Automatic Analysis</em>).</li>
+  <li>Conferir se a <em>Project Key</em> e a <em>Organization</em> mostradas batem com <code>sonar-project.properties</code>
+      na raiz; se não, ajustar o arquivo.</li>
+  <li>Gerar um token em <em>My Account &gt; Security</em> e cadastrá-lo no GitHub em
+      <em>Settings &gt; Secrets and variables &gt; Actions</em> com o nome <code>SONAR_TOKEN</code>.</li>
+</ol>
+<p>Sem o secret, o job do SonarCloud apenas avisa e não falha: o restante da CI continua valendo.</p>
+
+<!-- ================================================================ -->
+<h2 id="branches">10. Fluxo de branches</h2>
+<ul>
+  <li><code>feature/nome-da-tarefa</code>: cada funcionalidade ou correção. A CI roda a cada push.</li>
+  <li><code>develop</code>: integração. Recebe as features por pull request, que só deve ser aceito com a CI verde.</li>
+  <li><code>main</code>: versão estável. Recebe a <code>develop</code> por pull request; cada merge publica novas imagens (CD).</li>
+</ul>
+<p>
+  Recomenda-se proteger <code>main</code> e <code>develop</code> em <em>Settings &gt; Branches</em>, exigindo os checks
+  Backend, Frontend e Infra antes do merge.
+</p>
+
+<!-- ================================================================ -->
+<h2 id="ambientes">11. Ambientes de execução</h2>
+<div class="tabela">
+<table>
+  <thead><tr><th>Ambiente</th><th>Como roda</th><th>Banco</th><th>Para quê</th></tr></thead>
+  <tr><td>Desenvolvimento</td><td>API pelo IntelliJ e app com <code>npm run dev</code> (Vite, porta 5173, proxy para 8080)</td>
+      <td>MySQL local, ou o do Compose (<code>docker compose up -d db</code>), ou H2 em memória (perfil <code>h2</code>)</td>
+      <td>programar com recarga automática</td></tr>
+  <tr><td>Testes automatizados</td><td><code>mvn verify</code> e <code>npm test</code>, na máquina ou na CI</td><td>H2 em memória e IndexedDB simulado</td><td>garantir que nada quebrou</td></tr>
+  <tr><td>Docker Compose</td><td><code>docker compose up -d --build</code></td><td>MySQL 8.4 com volume</td><td>demonstração, homologação e publicação</td></tr>
+</table>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="problemas">12. Solução de problemas</h2>
+<div class="tabela">
+<table>
+  <thead><tr><th>Sintoma</th><th>Causa provável e solução</th></tr></thead>
+  <tr><td><code>port is already allocated</code> ao subir</td><td>Outro programa usa a porta (MySQL do Windows na 3306, IIS/Skype na 80).
+      Troque <code>MYSQL_PORTA</code> ou <code>WEB_PORTA</code> no <code>.env</code> (ex.: <code>WEB_PORTA=8081</code>).</td></tr>
+  <tr><td><code>api</code> não fica <code>healthy</code></td><td><code>docker compose logs api</code>. <code>Access denied</code>: as senhas do <code>.env</code> mudaram
+      depois que o volume foi criado; rode <code>docker compose down -v</code> para recriar o banco.</td></tr>
+  <tr><td>Mudei o script SQL e nada aconteceu</td><td>O script só roda com o volume vazio. Use <code>docker compose down -v</code> (apaga os dados) ou rode o script pelo Workbench.</td></tr>
+  <tr><td>O app mostra versão antiga</td><td>O service worker guarda a versão anterior; aparece a faixa "Há uma versão nova do app": toque em Atualizar.</td></tr>
+  <tr><td>Celular não oferece instalar</td><td>Precisa de HTTPS: use o perfil <code>tunel</code> (seção 7.1).</td></tr>
+  <tr><td>Docker Desktop não inicia no Windows</td><td>Ative a virtualização na BIOS e o WSL 2 (<code>wsl --install</code> no PowerShell como administrador).</td></tr>
+</table>
+</div>
+
+<footer>
+  Arquivos citados: <code>docker-compose.yml</code>, <code>.env.example</code>, <code>api/Dockerfile</code>, <code>app/Dockerfile</code>,
+  <code>app/nginx.conf</code>, <code>api/database/gado_corte.sql</code>, <code>.github/workflows/ci.yml</code>,
+  <code>.github/workflows/cd.yml</code> e <code>sonar-project.properties</code>.<br>
+  Prática Extensionista IV · Matheus Augusto · 2026
+</footer>
+
+</main>
+</body>
+</html>

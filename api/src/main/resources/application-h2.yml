@@ -1,0 +1,11 @@
+# Perfil "h2": roda a API sem MySQL instalado, com banco em memória.
+# Uso: mvnw spring-boot:run -Dspring-boot.run.profiles=h2
+# Os dados somem quando a API para.
+spring:
+  datasource:
+    url: jdbc:h2:mem:gado_corte;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop

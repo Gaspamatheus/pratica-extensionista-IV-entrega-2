@@ -1,0 +1,125 @@
+# CI: roda em todo push e pull request (fluxo feature/* -> develop -> main).
+# Testa a API e o app, confere se a infraestrutura Docker sobe e envia a análise ao SonarCloud.
+name: CI
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Um push novo na mesma branch cancela a execução anterior
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (mvn verify, JUnit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Testes e cobertura (JaCoCo)
+        run: mvn -B verify
+      - name: Guardar classes e cobertura para o SonarCloud
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: |
+            api/target/classes
+            api/target/site/jacoco/jacoco.xml
+          retention-days: 3
+
+  frontend:
+    name: Frontend (Vitest, vite build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - name: Testes e cobertura
+        run: npm run test:coverage
+      - name: Build de produção (PWA)
+        run: npm run build
+      - name: Guardar cobertura para o SonarCloud
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: app/coverage/lcov.info
+          retention-days: 3
+
+  docker:
+    name: Infra (docker compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar docker-compose.yml
+        run: docker compose config --quiet
+      - name: Construir as imagens
+        run: docker compose build
+      - name: Subir MySQL + API + app
+        run: docker compose up -d --wait --wait-timeout 240
+      - name: Teste de fumaça pelo Nginx (login e listagem)
+        run: |
+          TOKEN=$(curl -fsS -X POST http://localhost/api/auth/login \
+            -H 'Content-Type: application/json' -H 'Origin: http://localhost' \
+            -d '{"username":"gerente","senha":"gerente123"}' | jq -r .token)
+          curl -fsS http://localhost/api/animais -H "Authorization: Bearer $TOKEN" | jq 'length'
+          curl -fsS http://localhost/animais | grep -q '<div id="root">'
+          curl -fsS -o /dev/null http://localhost/sw.js
+      - name: Logs em caso de falha
+        if: failure()
+        run: docker compose logs
+      - name: Derrubar
+        if: always()
+        run: docker compose down -v
+
+  sonarcloud:
+    name: SonarCloud (cobertura, bugs)
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - name: Aviso se o SonarCloud não estiver configurado
+        if: env.SONAR_TOKEN == ''
+        run: echo "::notice::Secret SONAR_TOKEN não configurado; análise do SonarCloud pulada. Veja doc/documentacao.html."
+      - uses: actions/checkout@v4
+        if: env.SONAR_TOKEN != ''
+        with:
+          fetch-depth: 0 # histórico completo: o Sonar identifica o código novo de cada PR
+      - uses: actions/download-artifact@v4
+        if: env.SONAR_TOKEN != ''
+        with:
+          name: backend-build
+          path: api/target
+      - uses: actions/download-artifact@v4
+        if: env.SONAR_TOKEN != ''
+        with:
+          name: frontend-coverage
+          path: app/coverage
+      - name: Caminhos da cobertura do front relativos à raiz do repositório
+        if: env.SONAR_TOKEN != ''
+        run: sed -i 's#^SF:src/#SF:app/src/#' app/coverage/lcov.info
+      - name: Análise
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@v5

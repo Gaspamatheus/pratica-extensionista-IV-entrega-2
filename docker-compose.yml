@@ -1,0 +1,92 @@
+# Infraestrutura do app de Gestão de Gado de Corte.
+#
+#   docker compose up -d --build      sobe MySQL + API + app (constrói as imagens aqui)
+#   docker compose --profile tunel up -d   idem, mais um túnel HTTPS para instalar o PWA no celular
+#   docker compose down               para tudo (os dados do banco ficam no volume "dados-mysql")
+#
+# As senhas e portas vêm do arquivo .env (copie de .env.example). Sem .env, valem os padrões abaixo.
+
+name: gado-corte
+
+services:
+  # ---------------- Banco de dados ----------------
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      MYSQL_DATABASE: gado_corte
+      # Usuário da API, com acesso só ao banco gado_corte
+      MYSQL_USER: ${DB_USER:-gado_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-gado123}
+      TZ: America/Sao_Paulo
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    volumes:
+      - dados-mysql:/var/lib/mysql
+      # Na primeira vez (volume vazio) o MySQL roda este script: tabelas, usuários de login e rebanho de exemplo
+      - ./api/database/gado_corte.sql:/docker-entrypoint-initdb.d/01-gado_corte.sql:ro
+    ports:
+      # Só no próprio computador (para o MySQL Workbench). Troque a porta em MYSQL_PORTA se a 3306 estiver ocupada.
+      - "127.0.0.1:${MYSQL_PORTA:-3306}:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks: [interna]
+
+  # ---------------- API Spring Boot ----------------
+  api:
+    image: ${REGISTRO:-ghcr.io/gaspamatheus}/gado-corte-api:${TAG:-latest}
+    build: ./api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:mysql://db:3306/gado_corte?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=America/Sao_Paulo
+      DB_USER: ${DB_USER:-gado_app}
+      DB_PASSWORD: ${DB_PASSWORD:-gado123}
+      # O banco já vem pronto do script; a API só confere se as tabelas batem com as entidades
+      DDL_AUTO: validate
+      JWT_SECRET: ${JWT_SECRET:-troque-este-segredo-em-producao-0123456789}
+      JWT_EXPIRACAO_HORAS: ${JWT_EXPIRACAO_HORAS:-12}
+      # O app chega pela mesma origem (Nginx), mas o Vite rodando fora do Docker também é aceito
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:4173}
+      SEED_DADOS_EXEMPLO: ${SEED_DADOS_EXEMPLO:-true}
+      # Respeita os cabeçalhos X-Forwarded-* do Nginx (endereços certos no Swagger)
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      TZ: America/Sao_Paulo
+    ports:
+      - "${API_PORTA:-8080}:8080"
+    networks: [interna]
+
+  # ---------------- App (React + PWA servido pelo Nginx) ----------------
+  web:
+    image: ${REGISTRO:-ghcr.io/gaspamatheus}/gado-corte-web:${TAG:-latest}
+    build: ./app
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORTA:-80}:80"
+    networks: [interna]
+
+  # ---------------- Túnel HTTPS (opcional) ----------------
+  # O PWA só instala e funciona offline em HTTPS. Este serviço cria um endereço
+  # https://....trycloudflare.com temporário apontando para o app, sem conta nem configuração.
+  # Ver o endereço:  docker compose logs tunel | findstr trycloudflare   (Linux/macOS: grep)
+  tunel:
+    image: cloudflare/cloudflared:2026.10.0
+    profiles: [tunel]
+    command: tunnel --no-autoupdate --url http://web:80
+    depends_on: [web]
+    networks: [interna]
+
+volumes:
+  dados-mysql:
+
+networks:
+  interna:

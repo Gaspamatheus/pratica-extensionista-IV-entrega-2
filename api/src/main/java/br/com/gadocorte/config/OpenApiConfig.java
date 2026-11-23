@@ -1,0 +1,27 @@
+package br.com.gadocorte.config;
+
+import io.swagger.v3.oas.models.Components;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/** Documentação da API no Swagger UI (http://localhost:8080/swagger-ui.html), com botão "Authorize" para o JWT. */
+@Configuration
+public class OpenApiConfig {
+
+    @Bean
+    public OpenAPI openAPI() {
+        return new OpenAPI()
+                .info(new Info()
+                        .title("API Gestão de Gado de Corte")
+                        .version("0.2.0")
+                        .description("Rebanho, pesagens, sanidade e vendas. Faça login em /api/auth/login, "
+                                + "copie o token e clique em Authorize."))
+                .components(new Components().addSecuritySchemes("bearer",
+                        new SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT")))
+                .addSecurityItem(new SecurityRequirement().addList("bearer"));
+    }
+}
