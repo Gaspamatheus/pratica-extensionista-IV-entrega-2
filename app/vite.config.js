@@ -11,7 +11,15 @@ export default defineConfig(({ mode }) => {
   // Assim o front e a API ficam na mesma origem e o celular na mesma rede
   // consegue abrir o app pelo IP do computador sem esbarrar em CORS.
   const alvo = env.VITE_API_PROXY || 'http://localhost:8080'
-  const proxy = { '/api': { target: alvo, changeOrigin: true } }
+  const proxy = {
+    '/api': {
+      target: alvo,
+      changeOrigin: true,
+      // Para o navegador, /api é a mesma origem do app. Sem tirar o cabeçalho Origin, a API
+      // compararia o IP/túnel do celular com localhost:8080 e recusaria o login (403 de CORS).
+      configure: (p) => p.on('proxyReq', (req) => req.removeHeader('origin'))
+    }
+  }
   // Endereços externos aceitos além de localhost/IP: túnel HTTPS para testar o PWA no celular
   const allowedHosts = ['.trycloudflare.com']
 
